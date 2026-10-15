@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.134",
+    "@remotion/player": "^4.0.535",
     "@supabase/supabase-js": "^2.109.0",
     "ai": "^6.0.308",
     "next": "16.4.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "remotion": "^4.0.535",
     "zod": "^4.6.7"
   },
   "devDependencies": {
