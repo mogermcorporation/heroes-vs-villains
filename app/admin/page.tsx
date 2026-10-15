@@ -133,5 +133,41 @@ export default function AdminStudio() {
             </div>
           </section>
 
-          {/* THE VISUAL RENDER GRID */}
-          <section className="border border-gray-800 bg-gray-950 p-6
+          {/* THE VISUAL RENDER GRID - Syntax Error Fixed Here! */}
+          <section className="border border-gray-800 bg-gray-950 p-6">
+            <h2 className="text-2xl font-bold text-white mb-4 border-b border-gray-800 pb-2">
+              Raw FLUX.1 Asset Grid
+            </h2>
+            <div className="space-y-8 max-h-[800px] overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-gray-800">
+              {result.generatedPanels.map((panel, idx) => (
+                <div key={idx} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="bg-indigo-900 text-indigo-200 px-2 py-1 text-xs font-bold">
+                      PANEL {idx + 1}
+                    </span>
+                  </div>
+                  {panel.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img 
+                      src={panel.imageUrl} 
+                      alt={`Panel ${idx + 1}`} 
+                      className="w-full aspect-video object-cover border border-gray-800 grayscale-[20%] contrast-125"
+                    />
+                  ) : (
+                    <div className="w-full aspect-video flex items-center justify-center border border-red-900 bg-red-950/20 text-red-500 text-sm">
+                      RENDER FAILED
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-600">
+                    {panel.prompt}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+        </div>
+      )}
+    </div>
+  );
+}
