@@ -1,10 +1,11 @@
 import { supabaseAdmin } from '@/utils/supabase';
 import ComicPlayer from './components/ComicPlayer';
-
-// Force Next.js to fetch fresh data every time a user loads the page (Next.js 16 safe)
-export const dynamic = "force-dynamic";
+import { unstable_noStore as noStore } from 'next/cache';
 
 export default async function PublicHomepage() {
+  // Bypasses the cache safely in Next.js 16 without breaking the compiler
+  noStore();
+
   // 1. Fetch the latest generated episode
   const { data: episodes, error: epError } = await supabaseAdmin
     .from('episodes')
