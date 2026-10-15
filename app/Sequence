@@ -1,0 +1,27 @@
+import { AbsoluteFill, Sequence } from 'remotion';
+import { MotionPanel } from './MotionPanel';
+
+// The shape of our data from Supabase
+interface PanelData {
+  imageUrl: string;
+  prompt: string;
+}
+
+export const EpisodeComposition = ({ panels }: { panels: PanelData[] }) => {
+  // Each panel will be on screen for 90 frames (3 seconds at 30fps)
+  const PANEL_DURATION = 90;
+
+  return (
+    <AbsoluteFill className="bg-black">
+      {panels.map((panel, index) => (
+        <Sequence
+          key={index}
+          from={index * PANEL_DURATION}
+          durationInFrames={PANEL_DURATION}
+        >
+          <MotionPanel imageUrl={panel.imageUrl} prompt={panel.prompt} />
+        </Sequence>
+      ))}
+    </AbsoluteFill>
+  );
+};
