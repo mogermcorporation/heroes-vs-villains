@@ -174,3 +174,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// Vercel Cron Jobs trigger via GET requests. 
+// This simply routes the Cron trigger into your existing POST logic.
+export async function GET(req: Request) {
+  return POST(req);
+}
