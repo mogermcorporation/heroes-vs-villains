@@ -2,8 +2,10 @@ import { supabaseAdmin } from '@/utils/supabase';
 import ComicPlayer from './components/ComicPlayer';
 import { unstable_noStore as noStore } from 'next/cache';
 
+// Next.js 16 Fix: Explicitly prevent the compiler from prerendering this dynamic route
+export const instant = false;
+
 export default async function PublicHomepage() {
-  // Bypasses the cache safely in Next.js 16 without breaking the compiler
   noStore();
 
   // 1. Fetch the latest generated episode
