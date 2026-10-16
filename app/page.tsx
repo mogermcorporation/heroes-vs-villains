@@ -2,13 +2,12 @@ import { supabaseAdmin } from '@/utils/supabase';
 import ComicPlayer from './components/ComicPlayer';
 import { unstable_noStore as noStore } from 'next/cache';
 
-// Next.js 16 Fix: Explicitly prevent the compiler from prerendering this dynamic route
+// Next.js 16 Fix: Explicitly block the compiler from prerendering this route
 export const instant = false;
 
 export default async function PublicHomepage() {
   noStore();
 
-  // 1. Fetch the latest generated episode
   const { data: episodes, error: epError } = await supabaseAdmin
     .from('episodes')
     .select('*')
@@ -26,7 +25,6 @@ export default async function PublicHomepage() {
 
   const latestEpisode = episodes[0];
 
-  // 2. Fetch the panels for this specific episode
   const { data: panels } = await supabaseAdmin
     .from('panels')
     .select('*')
@@ -41,9 +39,7 @@ export default async function PublicHomepage() {
     })) || [];
 
   return (
-    <main className="min-h-screen bg-black text-gray-300 font-mono selection:bg-amber-500 selection:text-black pb-20">
-      
-      {/* HEADER */}
+    <main className="min-h-screen bg-black text-gray-300 font-mono pb-20">
       <header className="border-b-2 border-gray-900 p-8 flex justify-between items-end">
         <div>
           <h1 className="text-4xl md:text-6xl font-black text-white uppercase tracking-tighter">
@@ -53,23 +49,15 @@ export default async function PublicHomepage() {
             Public Broadcast Terminal
           </p>
         </div>
-        <div className="text-right hidden md:block">
-          <div className="text-amber-500 font-bold animate-pulse">● LIVE</div>
-          <div className="text-xs text-gray-600 tracking-widest">SIGNAL ACQUIRED</div>
-        </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-4 mt-12">
-        
-        {/* EPISODE TITLE */}
         <div className="mb-8 border-l-4 border-indigo-600 pl-4">
           <h2 className="text-2xl font-bold text-white uppercase tracking-wider">
             Episode {latestEpisode.episode_number}
           </h2>
-          <p className="text-gray-500 text-sm mt-1 tracking-widest">LATEST DECRYPTED TRANSMISSION</p>
         </div>
 
-        {/* VIDEO PLAYER */}
         {validPanels.length > 0 ? (
           <ComicPlayer panels={validPanels} />
         ) : (
@@ -78,7 +66,6 @@ export default async function PublicHomepage() {
           </div>
         )}
 
-        {/* DECRYPTED SCRIPT LOG */}
         <div className="mt-12 border border-gray-900 bg-gray-950 p-6 shadow-2xl">
           <h3 className="text-lg font-bold text-amber-500 mb-4 uppercase tracking-widest border-b border-gray-900 pb-2">
             Decrypted Comm-Log
@@ -87,7 +74,6 @@ export default async function PublicHomepage() {
             {latestEpisode.master_script}
           </div>
         </div>
-
       </div>
     </main>
   );
