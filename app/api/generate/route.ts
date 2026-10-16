@@ -1,25 +1,22 @@
 import { generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { groq } from '@ai-sdk/groq';
 import { supabaseAdmin } from '@/utils/supabase';
 import { NextResponse } from 'next/server';
 
-// Max duration allows Vercel to wait up to 60 seconds
 export const maxDuration = 60; 
 
 export async function POST(req: Request) {
-  // 🚨 SECURITY LOCKDOWN: Check for the exact Authorization header
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  
+  // Bypass the lock in local development, but enforce it in production
+  if (process.env.NODE_ENV !== 'development' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.error("Unauthorized generation attempt blocked.");
     return NextResponse.json({ error: 'Unauthorized Access' }, { status: 401 });
   }
 
   try {
-    console.log("🎬 Initiating Batch Production Pipeline with OpenAI...");
+    console.log("🎬 Initiating Batch Production Pipeline with Groq GPT-OSS-120B...");
 
-    // ==========================================
-    // STEP 1: FETCH PERPETUAL MEMORY
-    // ==========================================
     const { data: worldState, error: stateError } = await supabaseAdmin
       .from('world_state')
       .select('*')
@@ -28,11 +25,17 @@ export async function POST(req: Request) {
 
     if (stateError || !worldState) throw new Error("Failed to load WorldState.");
 
-    // ==========================================
-    // STEP 2: THE SCRIPTOR (GPT-4o)
-    // ==========================================
+    const { data: lastEpisode } = await supabaseAdmin
+      .from('episodes')
+      .select('episode_number')
+      .order('episode_number', { ascending: false })
+      .limit(1)
+      .single();
+
+    const nextEpisodeNum = lastEpisode ? lastEpisode.episode_number + 1 : 1;
+
     const { text: scriptorBlueprint } = await generateText({
-      model: openai('gpt-4o'),
+      model: groq('openai/gpt-oss-120b'),
       system: `You are the Master Scriptor for a brutalist sci-fi motion comic.
       Rules:
       1. Use the "Collateral Camera" (worm's-eye view, obscured by shrapnel, civilian POV).
@@ -49,22 +52,16 @@ export async function POST(req: Request) {
       Resolve the cliffhanger and advance the sequence.`,
     });
 
-    // ==========================================
-    // STEP 3: THE ACTORS (GPT-4o)
-    // ==========================================
     const { text: masterScript } = await generateText({
-      model: openai('gpt-4o'),
+      model: groq('openai/gpt-oss-120b'),
       system: `You are playing Aegis and Synapse reacting to a live environment. 
       Synapse believes in cold, mathematical correction. Aegis believes humanity's chaotic existence is sacred.
       Read the Director's blueprint and fill in the [WAITING ON ACTORS] blanks with their back-and-forth philosophical dialogue.`,
       prompt: `DIRECTOR'S BLUEPRINT:\n${scriptorBlueprint}\n\nExecute the dialogue and output the cohesive Master Script.`,
     });
 
-    // ==========================================
-    // STEP 4: THE ART DIRECTOR (GPT-4o)
-    // ==========================================
     const { text: rawPromptsData } = await generateText({
-      model: openai('gpt-4o'),
+      model: groq('openai/gpt-oss-120b'),
       system: `You are the Graphic Art Director. Extract exactly 4 distinct, hyper-detailed image generation prompts from the provided Master Script.
       Formula: [Camera Angle] + [Kinetic Action/Micro-Physics] + [Environment Details] + [Chiaroscuro Lighting]. 
       Return ONLY a valid JSON array of strings. No markdown formatting.`,
@@ -74,14 +71,11 @@ export async function POST(req: Request) {
     const cleanJsonString = rawPromptsData.replace(/```json/g, '').replace(/```/g, '').trim();
     const fluxPrompts: string[] = JSON.parse(cleanJsonString);
 
-    // ==========================================
-    // STEP 5: GENERATE IMAGES & SAVE EPISODE
-    // ==========================================
     const { data: episodeData, error: epError } = await supabaseAdmin
       .from('episodes')
       .insert({
-        episode_number: worldState.current_episode_number + 1,
-        title: `Episode ${worldState.current_episode_number + 1}`,
+        episode_number: nextEpisodeNum,
+        title: `Episode ${nextEpisodeNum}`,
         master_script: masterScript,
         status: 'generated'
       })
@@ -90,29 +84,29 @@ export async function POST(req: Request) {
 
     if (epError) throw new Error(epError.message);
 
-    const hfToken = process.env.HUGGINGFACE_API_KEY;
-    const generatedPanels = await Promise.all(fluxPrompts.map(async (prompt, index) => {
+    const generatedPanels = [];
+    
+    // Execute sequentially to prevent free API timeout drops
+    for (let index = 0; index < fluxPrompts.length; index++) {
+      const prompt = fluxPrompts[index];
       const response = await fetch(
-        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-        {
-          headers: { Authorization: `Bearer ${hfToken}`, "Content-Type": "application/json" },
-          method: "POST",
-          body: JSON.stringify({ inputs: prompt }),
-        }
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&model=flux`
       );
 
-      if (!response.ok) return { prompt, imageUrl: null };
+      if (response.ok) {
+        const imageBuffer = await response.arrayBuffer();
+        const fileName = `episode_${episodeData.id}_panel_${index + 1}_${Date.now()}.png`;
+        
+        await supabaseAdmin.storage
+          .from('comic_panels')
+          .upload(fileName, imageBuffer, { contentType: 'image/png' });
 
-      const imageBuffer = await response.arrayBuffer();
-      const fileName = `episode_${episodeData.id}_panel_${index + 1}_${Date.now()}.png`;
-      
-      await supabaseAdmin.storage
-        .from('comic_panels')
-        .upload(fileName, imageBuffer, { contentType: 'image/png' });
-
-      const { data: { publicUrl } } = supabaseAdmin.storage.from('comic_panels').getPublicUrl(fileName);
-      return { prompt, imageUrl: publicUrl };
-    }));
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('comic_panels').getPublicUrl(fileName);
+        generatedPanels.push({ prompt, imageUrl: publicUrl });
+      } else {
+        generatedPanels.push({ prompt, imageUrl: null });
+      }
+    }
 
     const panelsToInsert = generatedPanels.map((panel, index) => ({
       episode_id: episodeData.id,
@@ -122,11 +116,8 @@ export async function POST(req: Request) {
     }));
     await supabaseAdmin.from('panels').insert(panelsToInsert);
 
-    // ==========================================
-    // STEP 6: STATE UPDATER (GPT-4o)
-    // ==========================================
     const { text: newStateJson } = await generateText({
-      model: openai('gpt-4o'),
+      model: groq('openai/gpt-oss-120b'),
       system: `You are the Continuity Director. Output a JSON object representing the exact state of the world at the end of the script.
       Required keys: environment_status, aegis_status, synapse_status, active_cliffhanger.
       Return ONLY valid JSON. No markdown.`,
@@ -138,7 +129,7 @@ export async function POST(req: Request) {
     await supabaseAdmin
       .from('world_state')
       .update({
-        current_episode_number: worldState.current_episode_number + 1,
+        current_episode_number: nextEpisodeNum,
         environment_status: parsedState.environment_status,
         aegis_status: parsedState.aegis_status,
         synapse_status: parsedState.synapse_status,
@@ -149,7 +140,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      episode_number: worldState.current_episode_number + 1,
+      episode_number: nextEpisodeNum,
       masterScript, 
       generatedPanels,
       newState: parsedState
@@ -161,7 +152,6 @@ export async function POST(req: Request) {
   }
 }
 
-// Allow Vercel Cron to trigger via GET
 export async function GET(req: Request) {
   return POST(req);
 }
